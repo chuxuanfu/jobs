@@ -51,11 +51,12 @@ class OpenAIAdapterTests(unittest.TestCase):
         self.assertFalse(job.is_eligible_by_basic_filters)
         self.assertIn("excluded_by_title_keyword", job.eligibility_reason)
 
-    def test_ambiguous_region_requires_review(self):
+    def test_official_bay_area_region_label_is_eligible(self):
         job = self.adapter.parse_payload(self.payload, "2026-07-13T16:00:00+00:00")[3]
         apply_basic_filters(job, self.settings)
-        self.assertTrue(job.location_review_required)
-        self.assertFalse(job.is_eligible_by_basic_filters)
+        self.assertFalse(job.location_review_required)
+        self.assertTrue(job.is_eligible_by_basic_filters)
+        self.assertEqual("eligible_by_bay_area_region_label", job.location_filter_status)
 
 
 if __name__ == "__main__":

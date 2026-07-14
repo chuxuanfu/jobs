@@ -1,3 +1,14 @@
-enabled = false
+enabled = true
 adapter = "nvidia"
-status = "pending_sample_approval"
+source_name = "NVIDIA official Workday public CXS"
+host = "nvidia.wd5.myworkdayjobs.com"
+tenant = "nvidia"
+site = "NVIDIAExternalCareerSite"
+adapter_version = "0.1.0"
+page_size = 20
+detail_refresh_days = 7
+recent_detail_days = 2
+list_is_us = true
+
+[applied_facets]
+locationHierarchy1 = ["2fcb99c455831013ea52fb338f2932d8"]

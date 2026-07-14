@@ -5,6 +5,7 @@ close_after_missed_runs = 3
 detail_refresh_days = 7
 request_timeout_seconds = 45
 max_retries = 3
+minimum_request_interval_seconds = 0.75
 user_agent = "LocalJobMonitor/0.1 (+local personal job archive; no authentication)"
 backup_directory = ""
 
@@ -23,3 +24,4 @@ eligible_cities = [
   "Santa Clara", "San Jose", "San José", "Milpitas", "Campbell", "Los Gatos",
   "Saratoga", "Monte Sereno", "Fremont", "Newark"
 ]
+eligible_region_labels = ["San Francisco Bay Area", "Bay Area", "Silicon Valley", "South Bay"]

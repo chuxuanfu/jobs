@@ -56,12 +56,16 @@ class OpenAIAdapter(SourceAdapter):
         last_error: str | None = None
         last_status: int | None = None
         last_headers: dict[str, str] = {}
+        last_body = b""
         for attempt in range(max_retries):
             try:
                 with urlopen(request, timeout=timeout) as response:
                     body = response.read()
                     status = response.status
                     headers = _safe_headers(response.headers)
+                last_body = body
+                last_status = status
+                last_headers = headers
                 jobs = self.parse_payload(body, fetched_at)
                 return FetchResult(
                     company=self.company,
@@ -75,6 +79,7 @@ class OpenAIAdapter(SourceAdapter):
             except HTTPError as exc:
                 last_status = exc.code
                 last_headers = _safe_headers(exc.headers)
+                last_body = exc.read()
                 last_error = f"HTTP {exc.code}: {exc.reason}"
                 # A permission block is a circuit-breaker, never something to evade.
                 if exc.code in {401, 403}:
@@ -93,7 +98,7 @@ class OpenAIAdapter(SourceAdapter):
             fetched_at=fetched_at,
             http_status=last_status,
             response_headers=last_headers,
-            raw_body=b"",
+            raw_body=last_body,
             jobs=[],
             error=last_error or "Unknown fetch failure",
         )

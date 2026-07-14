@@ -1,0 +1,18 @@
+#!/bin/zsh
+set -u
+
+ROOT="${0:A:h:h}"
+"$ROOT/scripts/jobs-monitor" run --company all
+RUN_STATUS=$?
+"$ROOT/scripts/jobs-monitor" export --company all --mode current
+EXPORT_STATUS=$?
+"$ROOT/scripts/jobs-monitor" backup
+BACKUP_STATUS=$?
+
+if [[ $RUN_STATUS -ne 0 ]]; then
+  exit $RUN_STATUS
+fi
+if [[ $EXPORT_STATUS -ne 0 ]]; then
+  exit $EXPORT_STATUS
+fi
+exit $BACKUP_STATUS

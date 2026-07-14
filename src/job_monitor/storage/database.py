@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from contextlib import contextmanager
 import json
 from pathlib import Path
 import sqlite3
@@ -47,30 +48,47 @@ class CompanyDatabase:
         connection.execute("PRAGMA busy_timeout=5000")
         return connection
 
+    @contextmanager
+    def session(self, *, readonly: bool = False):
+        connection = self.connect(readonly=readonly)
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     def migrate(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        sql = self.migration_path.read_text(encoding="utf-8")
-        with self.connect() as connection:
-            connection.executescript(sql)
+        migration_directory = self.migration_path if self.migration_path.is_dir() else self.migration_path.parent
+        with self.session() as connection:
             connection.execute(
-                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
-                (1, _now()),
+                "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
             )
+            applied = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
+            for migration in sorted(migration_directory.glob("[0-9][0-9][0-9]_*.sql")):
+                version = int(migration.name.split("_", 1)[0])
+                if version in applied:
+                    continue
+                connection.executescript(migration.read_text(encoding="utf-8"))
+                connection.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                    (version, _now()),
+                )
 
     def is_baseline(self) -> bool:
-        with self.connect(readonly=True) as connection:
+        with self.session(readonly=True) as connection:
             row = connection.execute("SELECT COUNT(*) AS count FROM runs WHERE healthy=1 AND fetch_only=0").fetchone()
         return not row or row["count"] == 0
 
     def last_healthy_fetch_count(self) -> int | None:
-        with self.connect(readonly=True) as connection:
+        with self.session(readonly=True) as connection:
             row = connection.execute(
                 "SELECT fetched_count FROM runs WHERE healthy=1 ORDER BY id DESC LIMIT 1"
             ).fetchone()
         return int(row["fetched_count"]) if row else None
 
     def create_run(self, company: str, started_at: str, is_baseline: bool, fetch_only: bool) -> int:
-        with self.connect() as connection:
+        with self.session() as connection:
             cursor = connection.execute(
                 "INSERT INTO runs(company, started_at, is_baseline, fetch_only) VALUES (?, ?, ?, ?)",
                 (company, started_at, int(is_baseline), int(fetch_only)),
@@ -88,11 +106,23 @@ class CompanyDatabase:
         values = {key: value for key, value in values.items() if key in allowed}
         values["finished_at"] = _now()
         assignments = ", ".join(f"{key}=?" for key in values)
-        with self.connect() as connection:
+        with self.session() as connection:
             connection.execute(
                 f"UPDATE runs SET {assignments} WHERE id=?",
                 [*values.values(), run_id],
             )
+
+    def fail_unfinished_runs(self, error: str) -> int:
+        with self.session() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE runs
+                SET finished_at=?, success=0, healthy=0, error=?, warnings_json=?
+                WHERE finished_at IS NULL
+                """,
+                (_now(), error, canonical_json([error])),
+            )
+            return int(cursor.rowcount)
 
     def apply_jobs(
         self,
@@ -105,7 +135,7 @@ class CompanyDatabase:
     ) -> dict[str, int]:
         stats = {key: 0 for key in ("new", "updated", "unchanged", "possibly_closed", "closed", "reopened")}
         seen_ids = {job.source_job_id for job in jobs}
-        with self.connect() as connection:
+        with self.session() as connection:
             existing_rows = {
                 row["source_job_id"]: row
                 for row in connection.execute("SELECT * FROM jobs").fetchall()
@@ -178,7 +208,7 @@ class CompanyDatabase:
 
     def prune_jobs_older_than(self, reference_at: str, retention_days: int) -> int:
         """Remove old current jobs and their history; unknown posted dates are retained."""
-        with self.connect() as connection:
+        with self.session() as connection:
             rows = connection.execute("SELECT source_job_id, posted_at FROM jobs").fetchall()
             old_ids = [
                 row["source_job_id"]
@@ -261,15 +291,17 @@ class CompanyDatabase:
         elif mode == "all_open":
             clauses.append("status='open'")
         elif mode == "new_since":
-            clauses.append("change_type='new'")
+            event_clause = "EXISTS (SELECT 1 FROM job_events e WHERE e.source_job_id=jobs.source_job_id AND e.event_type='new'"
             if since:
-                clauses.append("last_changed_at>=?")
+                event_clause += " AND e.event_at>=?"
                 parameters.append(since)
+            clauses.append(event_clause + ")")
         elif mode == "updated":
-            clauses.append("change_type IN ('updated','reopened')")
+            event_clause = "EXISTS (SELECT 1 FROM job_events e WHERE e.source_job_id=jobs.source_job_id AND e.event_type IN ('updated','reopened')"
             if since:
-                clauses.append("last_changed_at>=?")
+                event_clause += " AND e.event_at>=?"
                 parameters.append(since)
+            clauses.append(event_clause + ")")
         elif mode == "closed":
             clauses.append("status='closed'")
         elif mode == "review":
@@ -278,15 +310,15 @@ class CompanyDatabase:
         else:
             raise ValueError(f"Unknown export mode: {mode}")
         where = " AND ".join(clauses) if clauses else "1=1"
-        with self.connect(readonly=True) as connection:
+        with self.session(readonly=True) as connection:
             rows = connection.execute(
-                f"SELECT * FROM jobs WHERE {where} ORDER BY posted_at DESC, source_job_id",
+                f"SELECT jobs.* FROM jobs WHERE {where} ORDER BY posted_at DESC, source_job_id",
                 parameters,
             ).fetchall()
         return [_export_row(row) for row in rows]
 
     def latest_runs(self, limit: int = 10) -> list[dict[str, Any]]:
-        with self.connect(readonly=True) as connection:
+        with self.session(readonly=True) as connection:
             rows = connection.execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(row) for row in rows]
 
@@ -305,18 +337,7 @@ def _serialized_job(job: Job) -> dict[str, Any]:
 
 
 def _baseline_in_scope(posted_at: str | None, observed_at: str, baseline_days: int) -> bool:
-    if not posted_at:
-        return True
-    try:
-        posted = datetime.fromisoformat(posted_at.replace("Z", "+00:00"))
-        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
-        if posted.tzinfo is None:
-            posted = posted.replace(tzinfo=timezone.utc)
-        if observed.tzinfo is None:
-            observed = observed.replace(tzinfo=timezone.utc)
-        return posted >= observed - timedelta(days=baseline_days)
-    except ValueError:
-        return True
+    return is_within_retention(posted_at, observed_at, baseline_days)
 
 
 def _export_row(row: sqlite3.Row) -> dict[str, Any]:

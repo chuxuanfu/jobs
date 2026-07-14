@@ -9,4 +9,5 @@ results/*.json
 logs/*.json
 logs/*.jsonl
 logs/*.md
+data/job_monitor.lock
 !**/.gitkeep

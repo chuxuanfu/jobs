@@ -12,6 +12,10 @@ class SourceAdapter(ABC):
     def __init__(self, company_config: dict, settings: dict):
         self.company_config = company_config
         self.settings = settings
+        self.existing_jobs: dict[str, dict] = {}
+
+    def set_existing_jobs(self, jobs: list[dict]) -> None:
+        self.existing_jobs = {str(job["source_job_id"]): job for job in jobs}
 
     @abstractmethod
     def fetch(self) -> FetchResult:
@@ -23,3 +27,9 @@ class SourceAdapter(ABC):
 
     def reparse_file(self, path: Path, fetched_at: str) -> list[Job]:
         return self.parse_payload(path.read_bytes(), fetched_at)
+
+    def reparse_archive(self, path: Path, fetched_at: str) -> list[Job]:
+        """Reparse a single-response archive; multi-response adapters override this."""
+        from job_monitor.archive import read_archived_payload
+
+        return self.parse_payload(read_archived_payload(path), fetched_at)

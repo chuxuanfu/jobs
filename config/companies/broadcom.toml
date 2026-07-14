@@ -1,3 +1,11 @@
-enabled = false
+enabled = true
 adapter = "broadcom"
-status = "pending_sample_approval"
+source_name = "Broadcom official Workday public CXS"
+host = "broadcom.wd1.myworkdayjobs.com"
+tenant = "broadcom"
+site = "External_Career"
+adapter_version = "0.1.0"
+page_size = 20
+detail_refresh_days = 7
+recent_detail_days = 2
+list_is_us = false

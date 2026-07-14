@@ -43,7 +43,12 @@ class _StructuredHTMLParser(HTMLParser):
             self._finish_block()
 
     def handle_data(self, data: str) -> None:
-        if self._active_tag is None or not data:
+        if not data:
+            return
+        if self._active_tag is None:
+            body = clean_text(data)
+            if body:
+                self.blocks.append(("paragraph", body))
             return
         self._parts.append(data)
         if self._strong_depth:

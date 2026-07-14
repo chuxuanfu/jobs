@@ -71,6 +71,15 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(1, self._run([reopened], "2026-07-19T00:00:00+00:00")["reopened"])
         self.assertEqual(1, len(self.db.query_jobs("current")))
 
+    def test_event_based_exports_survive_later_unchanged_runs(self):
+        self._run([make_job()], "2026-07-13T00:00:00+00:00", True)
+        self._run([make_job()], "2026-07-14T00:00:00+00:00")
+        self.assertEqual(1, len(self.db.query_jobs("new_since", "2026-07-12T00:00:00+00:00")))
+
+        self._run([make_job("Senior Engineer")], "2026-07-15T00:00:00+00:00")
+        self._run([make_job("Senior Engineer")], "2026-07-16T00:00:00+00:00")
+        self.assertEqual(1, len(self.db.query_jobs("updated", "2026-07-14T12:00:00+00:00")))
+
     def test_unhealthy_empty_response_does_not_close_when_not_applied(self):
         self._run([make_job()], "2026-07-13T00:00:00+00:00", True)
         # Pipeline intentionally does not call apply_jobs for an unhealthy response.
@@ -100,8 +109,15 @@ class StorageTests(unittest.TestCase):
         result = document["jobs"][0]
         self.assertNotIn("complete_job_posting_json", result)
         self.assertNotIn("description_raw_html", result)
-        self.assertEqual("Full description", result["description"]["plain_text"])
+        self.assertEqual("Full description", result["description"]["full_text"])
+        self.assertNotIn("responsibilities", result["description"])
         self.assertEqual(1, len({job["source_job_id"] for job in document["jobs"]}))
+
+    def test_migrations_are_idempotent(self):
+        self.db.migrate()
+        with self.db.connect(readonly=True) as connection:
+            versions = connection.execute("SELECT version, COUNT(*) FROM schema_migrations GROUP BY version").fetchall()
+        self.assertEqual([(1, 1)], [tuple(row) for row in versions])
 
 
 if __name__ == "__main__":

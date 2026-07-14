@@ -23,11 +23,14 @@ def evaluate_location(job: Job, location_config: dict) -> tuple[str, bool, bool,
         return "eligible_explicit_remote_us", True, False, None
 
     allowed = {_normalized(city) for city in location_config["eligible_cities"]}
+    allowed_regions = {_normalized(region) for region in location_config.get("eligible_region_labels", [])}
     saw_ambiguous = False
     for location in locations:
         candidates = {_normalized(location.city), _normalized(location.raw)}
         if any(_city_matches(candidate, allowed) for candidate in candidates if candidate):
             return "eligible_by_bay_area_city", True, False, None
+        if any(_region_matches(candidate, allowed_regions) for candidate in candidates if candidate):
+            return "eligible_by_bay_area_region_label", True, False, None
         combined = " ".join(candidates)
         if any(region in combined for region in AMBIGUOUS_REGIONS):
             saw_ambiguous = True
@@ -42,6 +45,10 @@ def _city_matches(candidate: str, allowed: set[str]) -> bool:
         if candidate == city or candidate.startswith(city + " ") or f" {city} " in f" {candidate} ":
             return True
     return False
+
+
+def _region_matches(candidate: str, allowed: set[str]) -> bool:
+    return any(candidate == region or region in candidate for region in allowed)
 
 
 def _is_explicit_remote(location: Location) -> bool:

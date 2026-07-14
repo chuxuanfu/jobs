@@ -1,3 +1,8 @@
-enabled = false
+enabled = true
 adapter = "apple"
-status = "pending_sample_approval"
+source_name = "Apple official careers public pages"
+search_url = "https://jobs.apple.com/en-us/search"
+detail_url_template = "https://jobs.apple.com/en-us/details/{job_id}/{slug}"
+adapter_version = "0.1.0"
+detail_refresh_days = 7
+recent_detail_days = 2

@@ -27,8 +27,8 @@ def export_company(database: CompanyDatabase, company: str, results_dir: Path, m
         "company": company,
         "job_count": len(jobs),
         "field_notes": {
-            "description.plain_text": "Complete official JD in readable text.",
-            "description structured fields": "Official HTML-heading excerpts; they intentionally overlap plain_text.",
+            "description.full_text": "Complete official JD in readable text, included once to avoid repeated content.",
+            "structured JD fields": "Responsibilities and qualification fields remain in the company database for audit, but are omitted here because they repeat full_text.",
             "audit payload": "Raw HTML and complete official payload remain in the company database and original/source archives, not this user-facing file.",
         },
         "jobs": jobs,
@@ -51,13 +51,28 @@ def export_combined(company_documents: Iterable[tuple[str, list[dict]]], results
     )
 
 
+def export_unavailable_company(company: str, results_dir: Path, status: str, reason: str | None) -> Path:
+    return write_json(
+        results_dir / f"{company}_open_eligible_jobs.json",
+        {
+            "schema_version": 2,
+            "company_schema": f"{company}.v1",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "mode": "current",
+            "company": company,
+            "status": status,
+            "reason": reason,
+            "job_count": 0,
+            "jobs": [],
+        },
+    )
+
+
 def _result_job(company: str, job: dict) -> dict:
-    if company == "openai":
-        return _openai_result_job(job)
-    return job
+    return _public_result_job(job)
 
 
-def _openai_result_job(job: dict) -> dict:
+def _public_result_job(job: dict) -> dict:
     compensation_ranges = []
     for item in job.get("location_specific_compensation") or []:
         compensation_ranges.append({key: value for key, value in item.items() if key != "raw"})
@@ -97,18 +112,15 @@ def _openai_result_job(job: dict) -> dict:
             "review_required": job.get("location_review_required"),
         },
         "description": {
-            "plain_text": job.get("description_plain_text"),
-            "responsibilities": job.get("responsibilities"),
-            "minimum_qualifications": job.get("minimum_qualifications"),
-            "preferred_qualifications": job.get("preferred_qualifications"),
-            "required_qualifications": job.get("required_qualifications"),
-            "education_requirements": job.get("education_requirements"),
-            "experience_requirements": job.get("experience_requirements"),
-            "other_requirements": job.get("other_requirements"),
-            "benefits": job.get("benefits"),
-            "travel_requirements": job.get("travel_requirements"),
-            "work_authorization_text": job.get("work_authorization_text"),
-            "equal_opportunity_text": job.get("equal_opportunity_text"),
+            "full_text": job.get("description_plain_text"),
+            "structured_fields_available_in_database": [
+                field for field in (
+                    "responsibilities", "minimum_qualifications", "preferred_qualifications",
+                    "required_qualifications", "education_requirements", "experience_requirements",
+                    "other_requirements", "benefits", "travel_requirements",
+                    "work_authorization_text", "equal_opportunity_text",
+                ) if job.get(field)
+            ],
         },
         "compensation": {
             "salary_text_raw": job.get("salary_text_raw"),

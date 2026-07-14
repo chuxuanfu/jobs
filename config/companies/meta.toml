@@ -1,3 +1,7 @@
-enabled = false
+enabled = true
 adapter = "meta"
-status = "pending_sample_approval"
+source_name = "Meta Careers official JobPosting JSON-LD"
+sitemap_url = "https://www.metacareers.com/jobs/sitemap.xml"
+adapter_version = "0.1.0"
+detail_refresh_days = 7
+recent_detail_days = 2

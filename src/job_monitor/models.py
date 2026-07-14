@@ -88,6 +88,23 @@ class Job:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> Job:
+        data = dict(value)
+        data.pop("status", None)
+        data.pop("first_seen_at", None)
+        data.pop("last_seen_at", None)
+        data.pop("closed_at", None)
+        data.pop("last_changed_at", None)
+        data.pop("change_type", None)
+        data.pop("baseline_in_scope", None)
+        data["locations"] = [
+            item if isinstance(item, Location) else Location(**item)
+            for item in data.get("locations") or []
+        ]
+        allowed = cls.__dataclass_fields__
+        return cls(**{key: item for key, item in data.items() if key in allowed})
+
 
 @dataclass
 class FetchResult:
@@ -100,6 +117,18 @@ class FetchResult:
     jobs: list[Job]
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
+    artifacts: list[RawArtifact] = field(default_factory=list)
+
+
+@dataclass
+class RawArtifact:
+    request_url: str
+    fetched_at: str
+    http_status: int | None
+    response_headers: dict[str, str]
+    raw_body: bytes
+    suggested_name: str | None = None
+    content_type: str | None = None
 
 
 @dataclass
