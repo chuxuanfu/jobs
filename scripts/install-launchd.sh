@@ -11,9 +11,10 @@ if [[ ! -x "$PYTHON" ]]; then
   exit 1
 fi
 
-"$PYTHON" -c 'import plistlib,sys; root,label,output=sys.argv[1:]; data={"Label":label,"ProgramArguments":[str(__import__("pathlib").Path(root)/"scripts"/"scheduled-run")],"WorkingDirectory":root,"StartCalendarInterval":{"Hour":9,"Minute":0},"RunAtLoad":True,"StandardOutPath":str(__import__("pathlib").Path(root)/"logs"/"launchd.stdout.log"),"StandardErrorPath":str(__import__("pathlib").Path(root)/"logs"/"launchd.stderr.log")}; plistlib.dump(data,open(output,"wb"))' "$ROOT" "$LABEL" "$PLIST"
+"$PYTHON" -c 'import plistlib,sys; root,label,output=sys.argv[1:]; data={"Label":label,"ProgramArguments":[str(__import__("pathlib").Path(root)/"scripts"/"scheduled-run")],"WorkingDirectory":root,"StartCalendarInterval":{"Minute":0},"RunAtLoad":True,"StandardOutPath":str(__import__("pathlib").Path(root)/"logs"/"launchd.stdout.log"),"StandardErrorPath":str(__import__("pathlib").Path(root)/"logs"/"launchd.stderr.log")}; plistlib.dump(data,open(output,"wb"))' "$ROOT" "$LABEL" "$PLIST"
 
 launchctl bootout "gui/$UID/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$UID" "$PLIST"
-print "Installed daily 09:00 launchd job: $PLIST"
-print "launchd uses the Mac system timezone and starts the first run now."
+print "Installed California-time daily job: $PLIST"
+print "launchd checks hourly; scheduled-run executes only at 09:00 America/Los_Angeles."
+print "The first run starts immediately."

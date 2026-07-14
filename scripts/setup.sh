@@ -58,11 +58,13 @@ for company in ("apple", "openai", "meta", "google", "broadcom", "nvidia"):
 '
 
 if [[ "${SETUP_SKIP_LAUNCHD:-0}" != "1" ]]; then
+  mkdir -p "$ROOT/data/scheduler"
+  "$VENV_PYTHON" -c 'from pathlib import Path; import sys; Path(sys.argv[1]).touch()' "$ROOT/data/scheduler/first-run.pending"
   "$ROOT/scripts/install-launchd.sh"
 fi
 
 print "Setup complete."
 print "Project: $ROOT"
-print "Daily schedule: 09:00 Mac local time"
+print "Daily schedule: 09:00 America/Los_Angeles"
 print "Backup: $BACKUP_DIRECTORY"
 print "The first launchd run starts immediately after installation."

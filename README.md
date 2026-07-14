@@ -63,7 +63,7 @@ cd ~/jobs
 ./setup.sh
 ```
 
-`setup.sh` 完全非交互：如果没有 Python 3.12，会通过 uv 官方 standalone installer 自动安装独立 Python；随后重建 `.venv`、创建或迁移六个 SQLite、创建默认备份目录 `~/JobsMonitorBackup`、安装每天 09:00 的 LaunchAgent，并立即启动第一次后台运行。无需 Homebrew，也不要求终端保持打开。
+`setup.sh` 完全非交互：如果没有 Python 3.12，会通过 uv 官方 standalone installer 自动安装独立 Python；随后重建 `.venv`、创建或迁移六个 SQLite、创建默认备份目录 `~/JobsMonitorBackup`、安装每天加州时间 09:00 的 LaunchAgent，并立即启动第一次后台运行。无需 Homebrew，也不要求终端保持打开。
 
 本机覆盖配置写在不上传 Git 的 `config/settings.local.toml`，可以随时编辑：
 
@@ -71,7 +71,7 @@ cd ~/jobs
 backup_directory = "/Volumes/YourBackup/jobs"
 ```
 
-launchd 使用 Mac 的系统时区；目标 Mac 应设置为 `America/Los_Angeles`。安装和卸载调度也可单独执行：
+LaunchAgent 每小时整点做一次轻量时间检查，只有在 `America/Los_Angeles` 的 09:00 才真正抓取，因此不依赖新 Mac 的系统时区。安装和卸载调度也可单独执行：
 
 ```bash
 ./scripts/install-launchd.sh

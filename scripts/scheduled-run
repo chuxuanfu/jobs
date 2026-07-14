@@ -2,12 +2,36 @@
 set -u
 
 ROOT="${0:A:h:h}"
+STATE_DIRECTORY="$ROOT/data/scheduler"
+FIRST_RUN_MARKER="$STATE_DIRECTORY/first-run.pending"
+LAST_RUN_MARKER="$STATE_DIRECTORY/last-scheduled-date"
+mkdir -p "$STATE_DIRECTORY"
+
+CALIFORNIA_DATE="$(TZ=America/Los_Angeles date +%F)"
+CALIFORNIA_HOUR="$(TZ=America/Los_Angeles date +%H)"
+FIRST_RUN=0
+if [[ -f "$FIRST_RUN_MARKER" ]]; then
+  FIRST_RUN=1
+else
+  if [[ "$CALIFORNIA_HOUR" != "09" ]]; then
+    exit 0
+  fi
+  if [[ -f "$LAST_RUN_MARKER" && "$(<"$LAST_RUN_MARKER")" == "$CALIFORNIA_DATE" ]]; then
+    exit 0
+  fi
+fi
+
 "$ROOT/scripts/jobs-monitor" run --company all
 RUN_STATUS=$?
 "$ROOT/scripts/jobs-monitor" export --company all --mode current
 EXPORT_STATUS=$?
 "$ROOT/scripts/jobs-monitor" backup
 BACKUP_STATUS=$?
+
+print -r -- "$CALIFORNIA_DATE" > "$LAST_RUN_MARKER"
+if [[ $FIRST_RUN -eq 1 ]]; then
+  rm -f "$FIRST_RUN_MARKER"
+fi
 
 if [[ $RUN_STATUS -ne 0 ]]; then
   exit $RUN_STATUS

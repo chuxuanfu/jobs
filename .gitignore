@@ -12,6 +12,7 @@ logs/*.jsonl
 logs/*.md
 logs/*.log
 data/job_monitor.lock
+data/scheduler/
 config/settings.local.toml
 jobs-transfer-*.zip
 !**/.gitkeep
