@@ -1,0 +1,8 @@
+#!/bin/zsh
+set -eu
+
+ROOT="${0:A:h:h}"
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  exec env PYTHONPATH="$ROOT/src" "$ROOT/.venv/bin/python" -m job_monitor.cli --root "$ROOT" "$@"
+fi
+exec env PYTHONPATH="$ROOT/src" python3 -m job_monitor.cli --root "$ROOT" "$@"

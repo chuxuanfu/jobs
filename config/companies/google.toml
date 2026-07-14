@@ -1,0 +1,4 @@
+enabled = false
+adapter = "google"
+status = "blocked_by_source_policy"
+reason = "Official robots.txt disallows careers result pagination and no complete public feed was found."

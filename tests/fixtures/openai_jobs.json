@@ -1,0 +1,116 @@
+{
+  "jobs": [
+    {
+      "id": "local-001",
+      "title": "Systems Engineer",
+      "department": "Engineering",
+      "team": "Infrastructure",
+      "employmentType": "FullTime",
+      "location": "San Francisco, CA",
+      "address": {
+        "postalAddress": {
+          "addressLocality": "San Francisco",
+          "addressRegion": "CA",
+          "addressCountry": "United States"
+        }
+      },
+      "secondaryLocations": [
+        {
+          "location": "San Jose, CA",
+          "address": {
+            "postalAddress": {
+              "addressLocality": "San José",
+              "addressRegion": "CA",
+              "addressCountry": "United States"
+            }
+          }
+        }
+      ],
+      "isRemote": false,
+      "workplaceType": "Hybrid",
+      "publishedAt": "2026-07-01T12:00:00.000Z",
+      "descriptionHtml": "<p><strong>About the role</strong></p><p>Build reliable systems.</p><p><strong>Responsibilities</strong></p><ul><li>Operate services</li></ul><p><strong>Minimum Qualifications</strong></p><p>Five years of experience.</p>",
+      "descriptionPlain": "About the role\nBuild reliable systems.\nResponsibilities\nOperate services\nMinimum Qualifications\nFive years of experience.",
+      "jobUrl": "https://openai.com/careers/local-001",
+      "applyUrl": "https://jobs.ashbyhq.com/openai/local-001/application",
+      "compensation": {
+        "compensationTierSummary": "$200K – $250K • Offers Equity",
+        "compensationTiers": [
+          {
+            "title": "San Francisco and San Jose",
+            "components": [
+              {
+                "compensationType": "Salary",
+                "minValue": 200000,
+                "maxValue": 250000,
+                "currencyCode": "USD",
+                "interval": "YEAR"
+              },
+              {
+                "compensationType": "Equity",
+                "currencyCode": "USD"
+              }
+            ]
+          },
+          {
+            "title": "Other US locations",
+            "components": [
+              {
+                "compensationType": "Salary",
+                "minValue": 180000,
+                "maxValue": 230000,
+                "currencyCode": "USD",
+                "interval": "YEAR"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "remote-001",
+      "title": "Security Engineer",
+      "department": "Security",
+      "employmentType": "FullTime",
+      "location": "Remote - US",
+      "isRemote": true,
+      "workplaceType": "Remote",
+      "publishedAt": "2026-07-02T12:00:00.000Z",
+      "descriptionHtml": "<p>Protect systems.</p>",
+      "jobUrl": "https://openai.com/careers/remote-001",
+      "applyUrl": "https://jobs.ashbyhq.com/openai/remote-001/application"
+    },
+    {
+      "id": "intern-001",
+      "title": "Research Intern",
+      "employmentType": "FullTime",
+      "location": "San Jose, CA",
+      "address": {
+        "postalAddress": {
+          "addressLocality": "San Jose",
+          "addressRegion": "CA",
+          "addressCountry": "United States"
+        }
+      },
+      "workplaceType": "OnSite",
+      "publishedAt": "2026-07-03T12:00:00.000Z",
+      "descriptionHtml": "<p>Internship.</p>",
+      "jobUrl": "https://openai.com/careers/intern-001"
+    },
+    {
+      "id": "review-001",
+      "title": "Finance Analyst",
+      "employmentType": "FullTime",
+      "location": "Bay Area",
+      "address": {
+        "postalAddress": {
+          "addressRegion": "CA",
+          "addressCountry": "United States"
+        }
+      },
+      "workplaceType": "Hybrid",
+      "descriptionHtml": "<p>Analyze finances.</p>",
+      "jobUrl": "https://openai.com/careers/review-001"
+    }
+  ]
+}

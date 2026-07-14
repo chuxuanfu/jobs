@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+data/databases/*.sqlite*
+source/*/*/
+original/*/*.json
+results/*.json
+logs/*.json
+logs/*.jsonl
+logs/*.md
+!**/.gitkeep

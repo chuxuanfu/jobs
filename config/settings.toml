@@ -1,0 +1,24 @@
+timezone = "America/Los_Angeles"
+daily_run_hour = 9
+baseline_days = 90
+close_after_missed_runs = 3
+detail_refresh_days = 7
+request_timeout_seconds = 45
+max_retries = 3
+user_agent = "LocalJobMonitor/0.1 (+local personal job archive; no authentication)"
+backup_directory = ""
+
+[health]
+minimum_parse_success_rate = 0.80
+maximum_count_drop_fraction = 0.60
+
+[location]
+center_name = "San Jose International Airport"
+center_latitude = 37.363947
+center_longitude = -121.928937
+radius_miles = 20.0
+nearby_cities = [
+  "San Jose", "San José", "Santa Clara", "Sunnyvale", "Cupertino",
+  "Mountain View", "Milpitas", "Campbell", "Los Gatos", "Saratoga",
+  "Los Altos", "Palo Alto", "Fremont", "Newark"
+]

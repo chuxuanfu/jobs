@@ -1,0 +1,5 @@
+enabled = true
+adapter = "openai"
+source_name = "OpenAI Ashby public job board API"
+endpoint = "https://api.ashbyhq.com/posting-api/job-board/openai?includeCompensation=true"
+adapter_version = "0.1.0"
