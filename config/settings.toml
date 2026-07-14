@@ -1,6 +1,6 @@
 timezone = "America/Los_Angeles"
 daily_run_hour = 9
-baseline_days = 90
+retention_days = 90
 close_after_missed_runs = 3
 detail_refresh_days = 7
 request_timeout_seconds = 45
@@ -13,12 +13,13 @@ minimum_parse_success_rate = 0.80
 maximum_count_drop_fraction = 0.60
 
 [location]
-center_name = "San Jose International Airport"
-center_latitude = 37.363947
-center_longitude = -121.928937
-radius_miles = 20.0
-nearby_cities = [
-  "San Jose", "San José", "Santa Clara", "Sunnyvale", "Cupertino",
-  "Mountain View", "Milpitas", "Campbell", "Los Gatos", "Saratoga",
-  "Los Altos", "Palo Alto", "Fremont", "Newark"
+region_name = "San Francisco to San Jose Bay Area corridor"
+eligible_cities = [
+  "San Francisco", "Daly City", "Brisbane", "South San Francisco", "Pacifica",
+  "San Bruno", "Millbrae", "Burlingame", "Hillsborough", "San Mateo",
+  "Foster City", "Belmont", "San Carlos", "Redwood City", "Atherton",
+  "Menlo Park", "East Palo Alto", "Palo Alto", "Portola Valley", "Woodside",
+  "Los Altos", "Los Altos Hills", "Mountain View", "Sunnyvale", "Cupertino",
+  "Santa Clara", "San Jose", "San José", "Milpitas", "Campbell", "Los Gatos",
+  "Saratoga", "Monte Sereno", "Fremont", "Newark"
 ]

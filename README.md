@@ -6,8 +6,9 @@
 
 - 从 OpenAI 正式使用的 Ashby 公开 job-board API 一次性读取当前职位；
 - 保存官方原始 JSON（gzip）、全部美国职位 JSON、每家公司独立 SQLite；
-- 只用官方字段、标题排除关键词和地点 allowlist 做确定性过滤；
-- Remote US 保留；hybrid/onsite 必须有至少一个本地地点；模糊地点进入 review；
+- 只用官方字段、标题排除关键词和可配置城市 allowlist 做确定性过滤；
+- 旧金山—半岛—San Jose 湾区走廊保留；主或次地点明确列出 Remote US 的职位也保留；
+- hybrid/onsite 必须至少有一个湾区地点或明确 Remote US 地点；模糊地点进入 review；
 - 保存职位当前状态、重要内容版本和状态事件；
 - 健康检查失败时不改变职位状态；连续 3 次健康抓取缺失才关闭；
 - 只导出 UTF-8 JSON，不包含 AI 生成内容；
@@ -27,7 +28,9 @@ logs/                   每日 Markdown 摘要及 JSONL 机器日志
 tests/                  离线 fixture 和自动测试
 ```
 
-`original` 与 `results` 的含义不同：前者保存全部美国公开职位用于查缺补漏；后者只包含当前开放、在 baseline 范围内、符合 employment/location 基础过滤的职位。
+`original` 与 `results` 的含义不同：前者保存全部美国公开职位用于查缺补漏；后者只包含当前开放、发布时间在滚动 90 天窗口内、符合 employment/location 基础过滤的职位。缺少官方发布时间的职位无法可靠判断年龄，因此继续保留并明确留空。
+
+OpenAI 的 user-facing results 使用公司专属的 `openai.v1` 结构。完整 JD 放在 `description.plain_text`，官方标题拆出的分节放在同一个 `description` 对象中。分节本来就是完整 JD 的子集，因此会有必要的文本重叠；原始 HTML 和嵌套官方 payload 只留在 SQLite、`original` 和 `source`，不会重复放进 results。
 
 ## 安装（样板阶段）
 
@@ -77,7 +80,7 @@ cd ~/jobs
 
 健康运行中某职位第一次缺失时标记 `possibly_closed`。连续 3 次健康运行缺失才标记 `closed`；closed job ID 再次出现则为 `reopened`。同一 ID 的官方内容 hash 改变则为 `updated`。
 
-首次 baseline 的 90 天限制仅决定职位是否进入面向用户的 current results。缺少官方发布时间的职位保留并视为 baseline 范围内，同时明确将时间字段留空。全部美国职位仍保存在 `original` 和公司数据库中。
+90 天是每次成功状态更新都会重新计算的滚动窗口，不再只作用于首次 baseline。超过 90 天的职位会连同其数据库版本和事件历史一起删除；删除发生后 SQLite 会 compact，以把空闲页归还磁盘。缺少官方发布时间的职位保留，同时明确将时间字段留空。`original/current_open_us_jobs.json` 仍保存当前全部美国职位，原始抓取仍按长期审计要求保存在 `source`。
 
 ## 访问与合规边界
 

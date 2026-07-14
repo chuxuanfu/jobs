@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 from job_monitor.hashing import canonical_json
 from job_monitor.models import Job
+from job_monitor.retention import is_within_retention
 
 
 JOB_FIELDS = (
@@ -175,6 +176,29 @@ class CompanyDatabase:
                 )
         return stats
 
+    def prune_jobs_older_than(self, reference_at: str, retention_days: int) -> int:
+        """Remove old current jobs and their history; unknown posted dates are retained."""
+        with self.connect() as connection:
+            rows = connection.execute("SELECT source_job_id, posted_at FROM jobs").fetchall()
+            old_ids = [
+                row["source_job_id"]
+                for row in rows
+                if not is_within_retention(row["posted_at"], reference_at, retention_days)
+            ]
+            for source_job_id in old_ids:
+                connection.execute("DELETE FROM job_versions WHERE source_job_id=?", (source_job_id,))
+                connection.execute("DELETE FROM job_events WHERE source_job_id=?", (source_job_id,))
+                connection.execute("DELETE FROM jobs WHERE source_job_id=?", (source_job_id,))
+        return len(old_ids)
+
+    def compact(self) -> None:
+        """Return deleted pages to disk after retention pruning."""
+        connection = self.connect()
+        try:
+            connection.execute("VACUUM")
+        finally:
+            connection.close()
+
     def _upsert_job(
         self,
         connection: sqlite3.Connection,
@@ -233,7 +257,7 @@ class CompanyDatabase:
         clauses: list[str] = []
         parameters: list[Any] = []
         if mode == "current":
-            clauses.extend(["status='open'", "is_eligible_by_basic_filters=1", "baseline_in_scope=1"])
+            clauses.extend(["status='open'", "is_eligible_by_basic_filters=1"])
         elif mode == "all_open":
             clauses.append("status='open'")
         elif mode == "new_since":

@@ -37,13 +37,13 @@ class OpenAIAdapterTests(unittest.TestCase):
         job = self.adapter.parse_payload(self.payload, "2026-07-13T16:00:00+00:00")[0]
         apply_basic_filters(job, self.settings)
         self.assertTrue(job.is_eligible_by_basic_filters)
-        self.assertEqual("eligible_by_city_allowlist", job.location_filter_status)
+        self.assertEqual("eligible_by_bay_area_city", job.location_filter_status)
 
     def test_remote_us_is_eligible(self):
         job = self.adapter.parse_payload(self.payload, "2026-07-13T16:00:00+00:00")[1]
         apply_basic_filters(job, self.settings)
         self.assertTrue(job.is_eligible_by_basic_filters)
-        self.assertEqual("eligible_remote_us", job.location_filter_status)
+        self.assertEqual("eligible_explicit_remote_us", job.location_filter_status)
 
     def test_title_keyword_excludes_intern(self):
         job = self.adapter.parse_payload(self.payload, "2026-07-13T16:00:00+00:00")[2]

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import re
 import unicodedata
 
@@ -16,45 +15,26 @@ def _normalized(value: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
-def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    radius = 3958.7613
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return radius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-
 def evaluate_location(job: Job, location_config: dict) -> tuple[str, bool, bool, float | None]:
-    if job.workplace_type == "remote":
-        if job.is_us_job:
-            return "eligible_remote_us", True, False, None
-        return "location_review_required", False, True, None
+    locations = job.locations or [Location(raw=job.location_raw or "")]
+    if job.is_us_job and (
+        job.workplace_type == "remote" or any(_is_explicit_remote(location) for location in locations)
+    ):
+        return "eligible_explicit_remote_us", True, False, None
 
-    allowed = {_normalized(city) for city in location_config["nearby_cities"]}
-    radius = float(location_config["radius_miles"])
-    center_lat = float(location_config["center_latitude"])
-    center_lon = float(location_config["center_longitude"])
-    distances: list[float] = []
+    allowed = {_normalized(city) for city in location_config["eligible_cities"]}
     saw_ambiguous = False
-    for location in job.locations or [Location(raw=job.location_raw or "")]:
-        if location.latitude is not None and location.longitude is not None:
-            distance = haversine_miles(center_lat, center_lon, location.latitude, location.longitude)
-            distances.append(distance)
-            if distance <= radius:
-                return "eligible_by_coordinates", True, False, distance
+    for location in locations:
         candidates = {_normalized(location.city), _normalized(location.raw)}
         if any(_city_matches(candidate, allowed) for candidate in candidates if candidate):
-            return "eligible_by_city_allowlist", True, False, min(distances) if distances else None
+            return "eligible_by_bay_area_city", True, False, None
         combined = " ".join(candidates)
         if any(region in combined for region in AMBIGUOUS_REGIONS):
             saw_ambiguous = True
 
-    if distances:
-        return "outside_radius", False, False, min(distances)
     if saw_ambiguous or not job.locations:
         return "location_review_required", False, True, None
-    return "outside_city_allowlist", False, False, None
+    return "outside_bay_area_city_list", False, False, None
 
 
 def _city_matches(candidate: str, allowed: set[str]) -> bool:
@@ -62,6 +42,16 @@ def _city_matches(candidate: str, allowed: set[str]) -> bool:
         if candidate == city or candidate.startswith(city + " ") or f" {city} " in f" {candidate} ":
             return True
     return False
+
+
+def _is_explicit_remote(location: Location) -> bool:
+    raw = _normalized(location.raw)
+    if not re.search(r"\bremote\b", raw):
+        return False
+    country = _normalized(location.country)
+    return country in {"us", "usa", "united states", "united states of america"} or bool(
+        re.search(r"\b(us|usa|united states)\b", raw)
+    )
 
 
 def apply_basic_filters(job: Job, settings: dict) -> Job:

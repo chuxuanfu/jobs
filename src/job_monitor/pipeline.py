@@ -12,6 +12,7 @@ from job_monitor.exporting import export_company
 from job_monitor.filters.location import apply_basic_filters
 from job_monitor.health import evaluate_health
 from job_monitor.reporting import write_run_report
+from job_monitor.retention import is_within_retention
 from job_monitor.storage import CompanyDatabase
 
 
@@ -58,10 +59,12 @@ def run_company(
     result = adapter.fetch()
     health = evaluate_health(result, previous_count, settings)
     us_jobs = [apply_basic_filters(job, settings) for job in result.jobs if job.is_us_job]
-    eligible_jobs = [job for job in us_jobs if job.is_eligible_by_basic_filters]
-    review_jobs = [job for job in us_jobs if job.location_review_required]
-    missing_posted = [job for job in us_jobs if not job.posted_at]
-    missing_salary = [job for job in us_jobs if not job.salary_text_raw]
+    retention_days = int(settings["retention_days"])
+    retained_jobs = [job for job in us_jobs if is_within_retention(job.posted_at, result.fetched_at, retention_days)]
+    eligible_jobs = [job for job in retained_jobs if job.is_eligible_by_basic_filters]
+    review_jobs = [job for job in retained_jobs if job.location_review_required]
+    missing_posted = [job for job in retained_jobs if not job.posted_at]
+    missing_salary = [job for job in retained_jobs if not job.salary_text_raw]
 
     summary: dict[str, Any] = {
         "company": company,
@@ -76,6 +79,8 @@ def run_company(
         "http_status": result.http_status,
         "fetched_count": len(result.jobs),
         "us_count": len(us_jobs),
+        "retained_count": len(retained_jobs),
+        "pruned_count": 0,
         "eligible_count": len(eligible_jobs),
         "new_count": 0,
         "updated_count": 0,
@@ -119,16 +124,19 @@ def run_company(
         )
         summary["original_path"] = str(original_path)
         if not fetch_only and run_id is not None:
+            summary["pruned_count"] = database.prune_jobs_older_than(result.fetched_at, retention_days)
             changes = database.apply_jobs(
                 run_id,
-                us_jobs,
+                retained_jobs,
                 result.fetched_at,
                 is_baseline,
-                int(settings["baseline_days"]),
+                retention_days,
                 int(settings["close_after_missed_runs"]),
             )
             for name, count in changes.items():
                 summary[f"{name}_count"] = count
+            if summary["pruned_count"]:
+                database.compact()
             result_path = export_company(database, company, paths.results, mode="current")
             summary["result_path"] = str(result_path)
 
@@ -161,12 +169,15 @@ def reparse_company(company: str, archive_path: Path, paths: Paths, *, apply: bo
     observed_at = datetime.now(timezone.utc).isoformat()
     jobs = adapter.parse_payload(read_archived_payload(archive_path), observed_at)
     us_jobs = [apply_basic_filters(job, settings) for job in jobs if job.is_us_job]
+    retention_days = int(settings["retention_days"])
+    retained_jobs = [job for job in us_jobs if is_within_retention(job.posted_at, observed_at, retention_days)]
     summary: dict[str, Any] = {
         "company": company,
         "archive": str(archive_path),
         "parsed_jobs": len(jobs),
         "us_count": len(us_jobs),
-        "eligible_count": sum(job.is_eligible_by_basic_filters for job in us_jobs),
+        "retained_count": len(retained_jobs),
+        "eligible_count": sum(job.is_eligible_by_basic_filters for job in retained_jobs),
         "apply": apply,
     }
     if not apply:
@@ -180,10 +191,13 @@ def reparse_company(company: str, archive_path: Path, paths: Paths, *, apply: bo
     database.migrate()
     is_baseline = database.is_baseline()
     run_id = database.create_run(company, observed_at, is_baseline, False)
+    pruned_count = database.prune_jobs_older_than(observed_at, retention_days)
     changes = database.apply_jobs(
-        run_id, us_jobs, observed_at, is_baseline, int(settings["baseline_days"]),
+        run_id, retained_jobs, observed_at, is_baseline, retention_days,
         int(settings["close_after_missed_runs"]),
     )
+    if pruned_count:
+        database.compact()
     original_path = paths.original / company / "current_open_us_jobs.json"
     write_json(
         original_path,
@@ -211,11 +225,13 @@ def reparse_company(company: str, archive_path: Path, paths: Paths, *, apply: bo
         "http_status": None,
         "fetched_count": len(jobs),
         "us_count": len(us_jobs),
-        "eligible_count": sum(job.is_eligible_by_basic_filters for job in us_jobs),
+        "retained_count": len(retained_jobs),
+        "pruned_count": pruned_count,
+        "eligible_count": sum(job.is_eligible_by_basic_filters for job in retained_jobs),
         **{f"{name}_count": count for name, count in changes.items()},
-        "review_count": sum(job.location_review_required for job in us_jobs),
-        "missing_posted_date_count": sum(not job.posted_at for job in us_jobs),
-        "missing_salary_count": sum(not job.salary_text_raw for job in us_jobs),
+        "review_count": sum(job.location_review_required for job in retained_jobs),
+        "missing_posted_date_count": sum(not job.posted_at for job in retained_jobs),
+        "missing_salary_count": sum(not job.salary_text_raw for job in retained_jobs),
         "warnings": ["offline_reparse"],
         "error": None,
         "database_path": str(database.path),

@@ -33,6 +33,7 @@ def _markdown_block(summary: dict[str, Any], local_time: str) -> str:
         f"- Official jobs fetched: {summary['fetched_count']}\n"
         f"- United States jobs: {summary['us_count']}\n"
         f"- Open eligible jobs: {summary['eligible_count']}\n"
+        f"- Retained jobs / pruned over retention window: {summary.get('retained_count', summary['us_count'])} / {summary.get('pruned_count', 0)}\n"
         f"- New / updated / unchanged: {summary['new_count']} / {summary['updated_count']} / {summary['unchanged_count']}\n"
         f"- Possibly closed / closed / reopened: {summary['possibly_closed_count']} / {summary['closed_count']} / {summary['reopened_count']}\n"
         f"- Location review required: {summary['review_count']}\n"

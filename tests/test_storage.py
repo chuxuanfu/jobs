@@ -2,29 +2,34 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
 from job_monitor.hashing import job_content_hash, sha256_value
 from job_monitor.models import Job, Location
+from job_monitor.exporting import export_company
 from job_monitor.storage import CompanyDatabase
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def make_job(title: str = "Engineer") -> Job:
+def make_job(title: str = "Engineer", source_job_id: str = "job-1", posted_at: str | None = "2026-07-01T00:00:00+00:00") -> Job:
     job = Job(
-        company="openai", source_name="fixture", source_job_id="job-1",
-        source_url="https://example.test/job-1", apply_url=None, canonical_url=None,
+        company="openai", source_name="fixture", source_job_id=source_job_id,
+        source_url=f"https://example.test/{source_job_id}", apply_url=None, canonical_url=None,
         source_adapter_version="test", title=title, normalized_title=title,
         employment_type="FullTime", workplace_type="onsite",
-        posted_at="2026-07-01T00:00:00+00:00", fetched_at="2026-07-13T00:00:00+00:00",
+        posted_at=posted_at, fetched_at="2026-07-13T00:00:00+00:00",
         locations=[Location(raw="San Jose, CA", city="San Jose", state="CA", country="United States")],
-        location_raw="San Jose, CA", location_filter_status="eligible_by_city_allowlist",
+        location_raw="San Jose, CA", location_filter_status="eligible_by_bay_area_city",
         location_review_required=False, is_us_job=True, is_eligible_by_basic_filters=True,
-        eligibility_reason="full_time_official_field;eligible_by_city_allowlist",
-        complete_job_posting_json={"id": "job-1", "title": title},
+        eligibility_reason="full_time_official_field;eligible_by_bay_area_city",
+        description_raw_html="<p>Full description</p>",
+        description_plain_text="Full description",
+        responsibilities="Build systems",
+        complete_job_posting_json={"id": source_job_id, "title": title, "descriptionHtml": "<p>Full description</p>"},
     )
     job.source_payload_hash = sha256_value(job.complete_job_posting_json)
     job.content_hash = job_content_hash(job.to_dict())
@@ -70,6 +75,33 @@ class StorageTests(unittest.TestCase):
         self._run([make_job()], "2026-07-13T00:00:00+00:00", True)
         # Pipeline intentionally does not call apply_jobs for an unhealthy response.
         self.assertEqual("open", self.db.query_jobs("all_open")[0]["status"])
+
+    def test_prune_removes_old_job_and_its_history_but_keeps_unknown_date(self):
+        jobs = [
+            make_job(source_job_id="old", posted_at="2026-01-01T00:00:00+00:00"),
+            make_job(source_job_id="recent", posted_at="2026-07-01T00:00:00+00:00"),
+            make_job(source_job_id="unknown", posted_at=None),
+        ]
+        self._run(jobs, "2026-07-13T00:00:00+00:00", True)
+        self.assertEqual(1, self.db.prune_jobs_older_than("2026-07-13T00:00:00+00:00", 90))
+        remaining = {job["source_job_id"] for job in self.db.query_jobs("all_open")}
+        self.assertEqual({"recent", "unknown"}, remaining)
+        self.db.compact()
+        with self.db.connect(readonly=True) as connection:
+            self.assertEqual(0, connection.execute("SELECT COUNT(*) FROM job_versions WHERE source_job_id='old'").fetchone()[0])
+            self.assertEqual(0, connection.execute("SELECT COUNT(*) FROM job_events WHERE source_job_id='old'").fetchone()[0])
+
+    def test_openai_result_is_unique_and_omits_audit_payload_duplication(self):
+        self._run([make_job()], "2026-07-13T00:00:00+00:00", True)
+        with tempfile.TemporaryDirectory() as directory:
+            output = export_company(self.db, "openai", Path(directory), "current")
+            document = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(1, document["job_count"])
+        result = document["jobs"][0]
+        self.assertNotIn("complete_job_posting_json", result)
+        self.assertNotIn("description_raw_html", result)
+        self.assertEqual("Full description", result["description"]["plain_text"])
+        self.assertEqual(1, len({job["source_job_id"] for job in document["jobs"]}))
 
 
 if __name__ == "__main__":
