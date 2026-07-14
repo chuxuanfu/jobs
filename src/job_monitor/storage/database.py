@@ -132,6 +132,7 @@ class CompanyDatabase:
         is_baseline: bool,
         baseline_days: int,
         close_after_missed_runs: int,
+        close_missing: bool = True,
     ) -> dict[str, int]:
         stats = {key: 0 for key in ("new", "updated", "unchanged", "possibly_closed", "closed", "reopened")}
         seen_ids = {job.source_job_id for job in jobs}
@@ -180,6 +181,8 @@ class CompanyDatabase:
                     self._insert_version(connection, job, run_id, observed_at, change_type, serialized["normalized_job_json"])
                     self._insert_event(connection, job.source_job_id, run_id, observed_at, change_type)
 
+            if not close_missing:
+                return stats
             for source_job_id, existing in existing_rows.items():
                 if source_job_id in seen_ids or existing["status"] == "closed":
                     continue
@@ -206,14 +209,59 @@ class CompanyDatabase:
                 )
         return stats
 
-    def prune_jobs_older_than(self, reference_at: str, retention_days: int) -> int:
-        """Remove old current jobs and their history; unknown posted dates are retained."""
+    def discovery_ids(self) -> set[str]:
+        with self.session(readonly=True) as connection:
+            table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='discovery_ids'"
+            ).fetchone()
+            if not table:
+                return set()
+            rows = connection.execute("SELECT source_job_id FROM discovery_ids").fetchall()
+        return {str(row["source_job_id"]) for row in rows}
+
+    def observe_discovery_ids(
+        self,
+        run_id: int,
+        source_job_ids: Iterable[str],
+        observed_at: str,
+    ) -> int:
+        unique_ids = sorted({str(value) for value in source_job_ids if str(value)})
         with self.session() as connection:
-            rows = connection.execute("SELECT source_job_id, posted_at FROM jobs").fetchall()
+            for source_job_id in unique_ids:
+                connection.execute(
+                    """
+                    INSERT INTO discovery_ids(
+                        source_job_id, first_seen_at, last_seen_at, first_run_id, last_run_id
+                    ) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(source_job_id) DO UPDATE SET
+                        last_seen_at=excluded.last_seen_at,
+                        last_run_id=excluded.last_run_id
+                    """,
+                    (source_job_id, observed_at, observed_at, run_id, run_id),
+                )
+        return len(unique_ids)
+
+    def prune_jobs_older_than(
+        self,
+        reference_at: str,
+        retention_days: int,
+        *,
+        fallback_to_first_seen: bool = False,
+    ) -> int:
+        """Remove old jobs; optionally age incremental records from first discovery."""
+        with self.session() as connection:
+            rows = connection.execute("SELECT source_job_id, posted_at, first_seen_at FROM jobs").fetchall()
             old_ids = [
                 row["source_job_id"]
                 for row in rows
-                if not is_within_retention(row["posted_at"], reference_at, retention_days)
+                if (
+                    row["posted_at"] is not None
+                    and not is_within_retention(row["posted_at"], reference_at, retention_days)
+                ) or (
+                    row["posted_at"] is None
+                    and fallback_to_first_seen
+                    and not is_within_retention(row["first_seen_at"], reference_at, retention_days)
+                )
             ]
             for source_job_id in old_ids:
                 connection.execute("DELETE FROM job_versions WHERE source_job_id=?", (source_job_id,))

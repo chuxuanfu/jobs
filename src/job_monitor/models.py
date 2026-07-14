@@ -118,6 +118,10 @@ class FetchResult:
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
     artifacts: list[RawArtifact] = field(default_factory=list)
+    source_item_count: int | None = None
+    parsed_item_count: int | None = None
+    discovered_source_ids: list[str] = field(default_factory=list)
+    snapshot_complete: bool = True
 
 
 @dataclass

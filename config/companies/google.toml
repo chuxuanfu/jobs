@@ -1,4 +1,19 @@
-enabled = false
+enabled = true
 adapter = "google"
-status = "blocked_by_source_policy"
-reason = "Official robots.txt disallows careers result pagination and no complete public feed was found."
+adapter_version = "google-v1"
+source_name = "Google Careers official first-page search and job details"
+search_url = "https://www.google.com/about/careers/applications/jobs/results?employment_type=FULL_TIME&location=San+Francisco+Bay+Area&sort_by=date"
+max_results_per_run = 20
+incremental_discovery = true
+initial_seed_without_jobs = true
+close_missing = false
+prune_unknown_posted_by_first_seen = true
+status = "incremental_first_page_only"
+
+[coverage]
+mode = "incremental_first_page_only"
+baseline = false
+official_filter = "Full-time + San Francisco Bay Area + Sort by date"
+maximum_visible_jobs_per_run = 20
+closure_tracking = false
+warning = "Only newly appearing IDs in the official first 20 results are captured. This is not a complete Google job inventory."

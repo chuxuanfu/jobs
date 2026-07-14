@@ -1,4 +1,5 @@
 .venv/
+.DS_Store
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -9,5 +10,8 @@ results/*.json
 logs/*.json
 logs/*.jsonl
 logs/*.md
+logs/*.log
 data/job_monitor.lock
+config/settings.local.toml
+jobs-transfer-*.zip
 !**/.gitkeep

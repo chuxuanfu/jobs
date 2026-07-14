@@ -42,7 +42,7 @@ def _parser() -> argparse.ArgumentParser:
     health.add_argument("--company", choices=(*COMPANIES, "all"), default="all")
 
     reparse = subparsers.add_parser("reparse", help="Parse an archived official payload without network access")
-    reparse.add_argument("--company", choices=("apple", "openai", "meta", "broadcom", "nvidia"), required=True)
+    reparse.add_argument("--company", choices=("apple", "openai", "meta", "google", "broadcom", "nvidia"), required=True)
     reparse.add_argument("--archive", type=Path, required=True)
     reparse.add_argument("--apply", action="store_true", help="Update normalized state from a known-complete archive")
 
@@ -78,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         companies = COMPANIES if args.company == "all" else (args.company,)
         outputs: list[str] = []
         combined: list[tuple[str, list[dict]]] = []
+        coverage_by_company: dict[str, dict] = {}
         for company in companies:
             database = _database_if_present(paths, company)
             if database is None:
@@ -87,12 +88,17 @@ def main(argv: list[str] | None = None) -> int:
                         company, paths.results, config["status"], config.get("reason"),
                     )))
                 continue
-            output = export_company(database, company, paths.results, args.mode, args.since)
+            config = load_company_config(paths, company)
+            output = export_company(
+                database, company, paths.results, args.mode, args.since,
+                coverage=config.get("coverage"),
+            )
             outputs.append(str(output))
             if args.company == "all" and args.mode == "current":
                 combined.append((company, database.query_jobs("current")))
+                coverage_by_company[company] = config.get("coverage") or {"mode": "complete_official_snapshot"}
         if combined:
-            outputs.append(str(export_combined(combined, paths.results)))
+            outputs.append(str(export_combined(combined, paths.results, coverage_by_company=coverage_by_company)))
         print(json.dumps({"outputs": outputs}, ensure_ascii=False, indent=2))
         return 0
 

@@ -28,6 +28,16 @@ class HealthArchiveTests(unittest.TestCase):
         result = FetchResult("openai", "https://example.test", "2026-07-13T00:00:00+00:00", 200, {}, b"x", jobs)
         self.assertFalse(evaluate_health(result, 100, load_settings(paths)).healthy)
 
+    def test_incremental_first_page_with_no_new_details_is_healthy(self):
+        result = FetchResult(
+            "google", "https://example.test", "2026-07-13T00:00:00+00:00",
+            200, {}, b"<main></main>", [], source_item_count=20,
+            parsed_item_count=20, snapshot_complete=False,
+        )
+        health = evaluate_health(result, 20, load_settings(project_paths(ROOT)))
+        self.assertTrue(health.healthy)
+        self.assertEqual(20, health.fetched_count)
+
     def test_raw_archive_can_be_reparsed(self):
         paths = project_paths(ROOT)
         settings = load_settings(paths)

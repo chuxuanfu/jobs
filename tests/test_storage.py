@@ -85,6 +85,23 @@ class StorageTests(unittest.TestCase):
         # Pipeline intentionally does not call apply_jobs for an unhealthy response.
         self.assertEqual("open", self.db.query_jobs("all_open")[0]["status"])
 
+    def test_partial_discovery_does_not_mark_missing_jobs_closed(self):
+        self._run([make_job()], "2026-07-13T00:00:00+00:00", True)
+        run_id = self.db.create_run("openai", "2026-07-14T00:00:00+00:00", False, False)
+        stats = self.db.apply_jobs(
+            run_id, [], "2026-07-14T00:00:00+00:00", False, 90, 3,
+            close_missing=False,
+        )
+        self.assertEqual(0, stats["possibly_closed"])
+        self.assertEqual("open", self.db.query_jobs("all_open")[0]["status"])
+
+    def test_discovery_ids_are_deduplicated_and_updated(self):
+        first_run = self.db.create_run("google", "2026-07-13T00:00:00+00:00", True, False)
+        self.assertEqual(2, self.db.observe_discovery_ids(first_run, ["1", "2", "1"], "2026-07-13T00:00:00+00:00"))
+        second_run = self.db.create_run("google", "2026-07-14T00:00:00+00:00", False, False)
+        self.assertEqual(2, self.db.observe_discovery_ids(second_run, ["2", "3"], "2026-07-14T00:00:00+00:00"))
+        self.assertEqual({"1", "2", "3"}, self.db.discovery_ids())
+
     def test_prune_removes_old_job_and_its_history_but_keeps_unknown_date(self):
         jobs = [
             make_job(source_job_id="old", posted_at="2026-01-01T00:00:00+00:00"),
@@ -100,12 +117,20 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(0, connection.execute("SELECT COUNT(*) FROM job_versions WHERE source_job_id='old'").fetchone()[0])
             self.assertEqual(0, connection.execute("SELECT COUNT(*) FROM job_events WHERE source_job_id='old'").fetchone()[0])
 
+    def test_incremental_unknown_date_can_expire_from_first_seen(self):
+        self._run([make_job(source_job_id="unknown", posted_at=None)], "2026-01-01T00:00:00+00:00", True)
+        self.assertEqual(1, self.db.prune_jobs_older_than(
+            "2026-07-13T00:00:00+00:00", 90, fallback_to_first_seen=True,
+        ))
+        self.assertEqual([], self.db.query_jobs("all_open"))
+
     def test_openai_result_is_unique_and_omits_audit_payload_duplication(self):
         self._run([make_job()], "2026-07-13T00:00:00+00:00", True)
         with tempfile.TemporaryDirectory() as directory:
             output = export_company(self.db, "openai", Path(directory), "current")
             document = json.loads(output.read_text(encoding="utf-8"))
         self.assertEqual(1, document["job_count"])
+        self.assertEqual("complete_official_snapshot", document["coverage"]["mode"])
         result = document["jobs"][0]
         self.assertNotIn("complete_job_posting_json", result)
         self.assertNotIn("description_raw_html", result)
@@ -117,7 +142,7 @@ class StorageTests(unittest.TestCase):
         self.db.migrate()
         with self.db.connect(readonly=True) as connection:
             versions = connection.execute("SELECT version, COUNT(*) FROM schema_migrations GROUP BY version").fetchall()
-        self.assertEqual([(1, 1)], [tuple(row) for row in versions])
+        self.assertEqual([(1, 1), (2, 1)], [tuple(row) for row in versions])
 
 
 if __name__ == "__main__":

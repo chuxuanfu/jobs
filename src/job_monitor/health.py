@@ -4,8 +4,8 @@ from job_monitor.models import FetchResult, HealthResult
 
 
 def evaluate_health(result: FetchResult, previous_count: int | None, settings: dict) -> HealthResult:
-    fetched_count = len(result.jobs)
-    parsed_count = len(result.jobs)
+    fetched_count = result.source_item_count if result.source_item_count is not None else len(result.jobs)
+    parsed_count = result.parsed_item_count if result.parsed_item_count is not None else len(result.jobs)
     parse_rate = 1.0 if fetched_count else 0.0
     reasons: list[str] = []
     if result.error:

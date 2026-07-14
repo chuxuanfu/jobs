@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from job_monitor.adapters import AppleAdapter, BroadcomAdapter, MetaAdapter, NvidiaAdapter, OpenAIAdapter
+from job_monitor.adapters import AppleAdapter, BroadcomAdapter, GoogleAdapter, MetaAdapter, NvidiaAdapter, OpenAIAdapter
 from job_monitor.archive import archive_fetch, write_json
 from job_monitor.config import Paths, ensure_runtime_directories, load_company_config, load_settings
 from job_monitor.exporting import export_company
@@ -19,6 +19,7 @@ from job_monitor.storage import CompanyDatabase
 ADAPTERS = {
     "apple": AppleAdapter,
     "broadcom": BroadcomAdapter,
+    "google": GoogleAdapter,
     "meta": MetaAdapter,
     "nvidia": NvidiaAdapter,
     "openai": OpenAIAdapter,
@@ -63,6 +64,12 @@ def run_company(
     run_id = None if dry_run else database.create_run(company, started_at, is_baseline, fetch_only)
     if database.path.exists():
         adapter.set_existing_jobs(database.query_jobs("all_open"))
+    if company_config.get("incremental_discovery", False):
+        seen_source_ids = database.discovery_ids() if database.path.exists() else set()
+        adapter.set_incremental_context(
+            seen_source_ids,
+            initial_seed_only=bool(company_config.get("initial_seed_without_jobs", False)) and not seen_source_ids,
+        )
 
     try:
         result = adapter.fetch()
@@ -100,7 +107,7 @@ def run_company(
         "fetch_only": fetch_only,
         "request_url": result.request_url,
         "http_status": result.http_status,
-        "fetched_count": len(result.jobs),
+        "fetched_count": health.fetched_count,
         "us_count": len(us_jobs),
         "retained_count": len(retained_jobs),
         "pruned_count": 0,
@@ -142,12 +149,19 @@ def run_company(
                 "source": company_config["source_name"],
                 "fetched_at": result.fetched_at,
                 "job_count": len(us_jobs),
+                "coverage": company_config.get("coverage"),
                 "jobs": [job.to_dict() for job in us_jobs],
             },
         )
         summary["original_path"] = str(original_path)
         if not fetch_only and run_id is not None:
-            summary["pruned_count"] = database.prune_jobs_older_than(result.fetched_at, retention_days)
+            if result.discovered_source_ids:
+                database.observe_discovery_ids(run_id, result.discovered_source_ids, result.fetched_at)
+            summary["pruned_count"] = database.prune_jobs_older_than(
+                result.fetched_at,
+                retention_days,
+                fallback_to_first_seen=bool(company_config.get("prune_unknown_posted_by_first_seen", False)),
+            )
             changes = database.apply_jobs(
                 run_id,
                 retained_jobs,
@@ -155,12 +169,16 @@ def run_company(
                 is_baseline,
                 retention_days,
                 int(settings["close_after_missed_runs"]),
+                close_missing=bool(company_config.get("close_missing", result.snapshot_complete)),
             )
             for name, count in changes.items():
                 summary[f"{name}_count"] = count
             if summary["pruned_count"]:
                 database.compact()
-            result_path = export_company(database, company, paths.results, mode="current")
+            result_path = export_company(
+                database, company, paths.results, mode="current",
+                coverage=company_config.get("coverage"),
+            )
             summary["result_path"] = str(result_path)
 
     summary["finished_at"] = datetime.now(timezone.utc).isoformat()
@@ -214,10 +232,15 @@ def reparse_company(company: str, archive_path: Path, paths: Paths, *, apply: bo
     database.migrate()
     is_baseline = database.is_baseline()
     run_id = database.create_run(company, observed_at, is_baseline, False)
-    pruned_count = database.prune_jobs_older_than(observed_at, retention_days)
+    pruned_count = database.prune_jobs_older_than(
+        observed_at,
+        retention_days,
+        fallback_to_first_seen=bool(company_config.get("prune_unknown_posted_by_first_seen", False)),
+    )
     changes = database.apply_jobs(
         run_id, retained_jobs, observed_at, is_baseline, retention_days,
         int(settings["close_after_missed_runs"]),
+        close_missing=bool(company_config.get("close_missing", True)),
     )
     if pruned_count:
         database.compact()
@@ -234,7 +257,10 @@ def reparse_company(company: str, archive_path: Path, paths: Paths, *, apply: bo
             "jobs": [job.to_dict() for job in us_jobs],
         },
     )
-    result_path = export_company(database, company, paths.results, mode="current")
+    result_path = export_company(
+        database, company, paths.results, mode="current",
+        coverage=company_config.get("coverage"),
+    )
     full_summary = {
         "company": company,
         "started_at": observed_at,

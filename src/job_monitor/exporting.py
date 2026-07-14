@@ -8,7 +8,15 @@ from job_monitor.archive import write_json
 from job_monitor.storage import CompanyDatabase
 
 
-def export_company(database: CompanyDatabase, company: str, results_dir: Path, mode: str = "current", since: str | None = None) -> Path:
+def export_company(
+    database: CompanyDatabase,
+    company: str,
+    results_dir: Path,
+    mode: str = "current",
+    since: str | None = None,
+    *,
+    coverage: dict | None = None,
+) -> Path:
     jobs = [_result_job(company, job) for job in database.query_jobs(mode=mode, since=since)]
     suffix = {
         "current": "open_eligible_jobs",
@@ -26,6 +34,7 @@ def export_company(database: CompanyDatabase, company: str, results_dir: Path, m
         "mode": mode,
         "company": company,
         "job_count": len(jobs),
+        "coverage": coverage or {"mode": "complete_official_snapshot"},
         "field_notes": {
             "description.full_text": "Complete official JD in readable text, included once to avoid repeated content.",
             "structured JD fields": "Responsibilities and qualification fields remain in the company database for audit, but are omitted here because they repeat full_text.",
@@ -36,7 +45,12 @@ def export_company(database: CompanyDatabase, company: str, results_dir: Path, m
     return write_json(path, document)
 
 
-def export_combined(company_documents: Iterable[tuple[str, list[dict]]], results_dir: Path) -> Path:
+def export_combined(
+    company_documents: Iterable[tuple[str, list[dict]]],
+    results_dir: Path,
+    *,
+    coverage_by_company: dict[str, dict] | None = None,
+) -> Path:
     jobs = [_result_job(company, job) for company, company_jobs in company_documents for job in company_jobs]
     return write_json(
         results_dir / "all_companies_open_eligible_jobs.json",
@@ -46,6 +60,7 @@ def export_combined(company_documents: Iterable[tuple[str, list[dict]]], results
             "mode": "current",
             "company": "all",
             "job_count": len(jobs),
+            "coverage_by_company": coverage_by_company or {},
             "jobs": jobs,
         },
     )

@@ -35,7 +35,11 @@ def load_toml(path: Path) -> dict:
 
 
 def load_settings(paths: Paths) -> dict:
-    return load_toml(paths.config / "settings.toml")
+    settings = load_toml(paths.config / "settings.toml")
+    local_path = paths.config / "settings.local.toml"
+    if local_path.exists():
+        settings = _merge(settings, load_toml(local_path))
+    return settings
 
 
 def load_company_config(paths: Paths, company: str) -> dict:
@@ -51,3 +55,13 @@ def ensure_runtime_directories(paths: Paths, companies: list[str]) -> None:
     for company in companies:
         (paths.source / company).mkdir(parents=True, exist_ok=True)
         (paths.original / company).mkdir(parents=True, exist_ok=True)
+
+
+def _merge(base: dict, override: dict) -> dict:
+    result = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _merge(result[key], value)
+        else:
+            result[key] = value
+    return result

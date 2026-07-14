@@ -7,7 +7,8 @@ import sqlite3
 
 
 BACKUP_PATHS = (
-    "config", "migrations", "src", "scripts", "tests", "README.md", "pyproject.toml",
+    "config", "migrations", "src", "scripts", "tests", "setup.sh", ".gitignore",
+    "README.md", "pyproject.toml",
     "data/databases", "source", "original", "results", "logs",
 )
 

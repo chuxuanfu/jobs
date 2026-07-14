@@ -13,9 +13,15 @@ class SourceAdapter(ABC):
         self.company_config = company_config
         self.settings = settings
         self.existing_jobs: dict[str, dict] = {}
+        self.seen_source_ids: set[str] = set()
+        self.initial_seed_only = False
 
     def set_existing_jobs(self, jobs: list[dict]) -> None:
         self.existing_jobs = {str(job["source_job_id"]): job for job in jobs}
+
+    def set_incremental_context(self, source_ids: set[str], *, initial_seed_only: bool) -> None:
+        self.seen_source_ids = set(source_ids)
+        self.initial_seed_only = initial_seed_only
 
     @abstractmethod
     def fetch(self) -> FetchResult:

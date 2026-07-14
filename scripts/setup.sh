@@ -1,39 +1,68 @@
 #!/bin/zsh
-set -eu
+set -euo pipefail
 
 ROOT="${0:A:h:h}"
-PYTHON_BIN="${PYTHON_BIN:-/opt/homebrew/bin/python3.12}"
 
-if [[ ! -x "$PYTHON_BIN" ]]; then
-  PYTHON_BIN="$(command -v python3.12 || command -v python3)"
-fi
-
-if [[ -z "$PYTHON_BIN" ]]; then
-  print -u2 "Python 3.12 or newer is required."
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  print -u2 "This one-click setup supports macOS only."
   exit 1
 fi
 
-"$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)'
-"$PYTHON_BIN" -m venv "$ROOT/.venv"
+find_python() {
+  local candidate
+  for candidate in "${PYTHON_BIN:-}" /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12 "$(command -v python3.12 2>/dev/null || true)" "$(command -v python3 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))' 2>/dev/null; then
+      print -r -- "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
 
+PYTHON="$(find_python || true)"
+if [[ -z "$PYTHON" ]]; then
+  UV="$(command -v uv 2>/dev/null || true)"
+  if [[ -z "$UV" ]]; then
+    print "Installing the self-contained Python runtime manager..."
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
+    for candidate in "$HOME/.local/bin/uv" "$HOME/.cargo/bin/uv"; do
+      if [[ -x "$candidate" ]]; then
+        UV="$candidate"
+        break
+      fi
+    done
+  fi
+  if [[ -z "$UV" || ! -x "$UV" ]]; then
+    print -u2 "Could not install the Python runtime automatically."
+    exit 1
+  fi
+  "$UV" python install 3.12
+  "$UV" venv --python 3.12 --clear "$ROOT/.venv"
+else
+  "$PYTHON" -m venv --clear "$ROOT/.venv"
+fi
+
+VENV_PYTHON="$ROOT/.venv/bin/python"
 mkdir -p "$ROOT/data/databases" "$ROOT/source" "$ROOT/original" "$ROOT/results" "$ROOT/logs"
 
-BACKUP_DIRECTORY="${BACKUP_DIRECTORY:-}"
-if [[ -t 0 && -z "$BACKUP_DIRECTORY" ]]; then
-  print -n "Backup directory (blank disables backup; editable later in config/settings.toml): "
-  read -r BACKUP_DIRECTORY
-fi
-if [[ -n "$BACKUP_DIRECTORY" ]]; then
-  "$PYTHON_BIN" -c 'from pathlib import Path; import json,sys; path=Path(sys.argv[1]); value=str(Path(sys.argv[2]).expanduser()); text=path.read_text(); import re; text=re.sub(r"^backup_directory\s*=.*$", "backup_directory = "+json.dumps(value), text, flags=re.M); path.write_text(text)' "$ROOT/config/settings.toml" "$BACKUP_DIRECTORY"
+BACKUP_DIRECTORY="${BACKUP_DIRECTORY:-$HOME/JobsMonitorBackup}"
+mkdir -p "$BACKUP_DIRECTORY"
+"$VENV_PYTHON" -c 'from pathlib import Path; import json,sys; path=Path(sys.argv[1]); value=str(Path(sys.argv[2]).expanduser().resolve()); path.write_text("backup_directory = "+json.dumps(value)+"\n", encoding="utf-8")' "$ROOT/config/settings.local.toml" "$BACKUP_DIRECTORY"
+
+env PYTHONPATH="$ROOT/src" "$VENV_PYTHON" -c '
+from job_monitor.config import project_paths
+from job_monitor.storage import CompanyDatabase
+paths = project_paths()
+for company in ("apple", "openai", "meta", "google", "broadcom", "nvidia"):
+    CompanyDatabase(paths.databases / f"{company}_jobs.sqlite", paths.root / "migrations").migrate()
+'
+
+if [[ "${SETUP_SKIP_LAUNCHD:-0}" != "1" ]]; then
+  "$ROOT/scripts/install-launchd.sh"
 fi
 
-if [[ -t 0 ]]; then
-  print -n "Install daily 09:00 launchd schedule now? [Y/n]: "
-  read -r INSTALL_SCHEDULE
-  if [[ "${INSTALL_SCHEDULE:-Y}" != [nN]* ]]; then
-    "$ROOT/scripts/install-launchd.sh"
-  fi
-fi
-
-print "Installed. Run: $ROOT/scripts/jobs-monitor run --company openai --dry-run"
-print "Backup path: $ROOT/config/settings.toml"
+print "Setup complete."
+print "Project: $ROOT"
+print "Daily schedule: 09:00 Mac local time"
+print "Backup: $BACKUP_DIRECTORY"
+print "The first launchd run starts immediately after installation."
